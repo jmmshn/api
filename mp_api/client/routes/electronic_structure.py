@@ -14,6 +14,7 @@ from monty.serialization import MontyDecoder
 from pymatgen.analysis.magnetism.analyzer import Ordering
 from pymatgen.core.periodic_table import Element
 from pymatgen.electronic_structure.core import OrbitalType, Spin
+from pymatgen.electronic_structure.dos import CompleteDos
 
 from mp_api.client.core import BaseRester, MPRestError
 from mp_api.client.core.utils import validate_ids
@@ -463,13 +464,13 @@ class DosRester(BaseRester):
             num_chunks=1,
             chunk_size=1,
         )
-
+        result["data"]["dos"]
         if result.get("data", None) is not None:
             return result["data"]
         else:
             raise MPRestError("No object found")
 
-    def get_dos_from_material_id(self, material_id: str):
+    def get_dos_from_material_id(self, material_id: str, normalize: bool = False):
         """
         Get the complete density of states pymatgen object associated with a Materials Project ID.
 
@@ -499,6 +500,28 @@ class DosRester(BaseRester):
             packed_bytes = zlib.decompress(b64_bytes)
             json_data = msgpack.unpackb(packed_bytes, raw=False)
             data = MontyDecoder().process_decoded(json_data["data"])
+            if normalize:
+                data = _normalize_dos(data)
             return data
         else:
             raise MPRestError("No density of states object found.")
+
+
+def _normalize_dos(cdos: CompleteDos):
+    """Normalize the stored DOS object to units (states/eV/Å³)
+
+    Args:
+        cdos (CompleteDos): CompleteDos object
+
+    Returns:
+        CompleteDos: CompleteDos object
+    """
+    if cdos.norm_vol is not None:
+        raise RuntimeError("DOS object already normalized")
+
+    return CompleteDos(
+        cdos.structure,
+        total_dos=cdos.tdos,
+        pdos=cdos.pdos,
+        normalize=True,
+    )
